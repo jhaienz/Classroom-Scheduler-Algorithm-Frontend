@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Classroom, DayOfWeek, OptimizedResult } from '@/lib/types';
+import { Classroom, DayOfWeek, Course, ActivitySelectionResponse } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -21,20 +21,55 @@ export function OptimizerView({ classrooms }: Props) {
   const [classroomId, setClassroomId] = useState(classrooms[0]?.id || '');
   const [dayOfWeek, setDayOfWeek] = useState<DayOfWeek>('Monday');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<OptimizedResult | null>(null);
+  const [result, setResult] = useState<ActivitySelectionResponse | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
 
   const handleOptimize = async () => {
     if (!classroomId) {
       toast.error('Please select a classroom');
       return;
     }
+    
     setLoading(true);
     try {
-      const data = await api.optimizeSchedule(classroomId, dayOfWeek);
-      setResult(data);
-      toast.success('Optimization complete!');
+      // Fetch courses for this classroom
+      const classroomCourses = await api.getCoursesByClassroom(classroomId);
+      
+      // Filter courses by day of week
+      const filteredCourses = classroomCourses.filter(
+        (course) => course.dayOfWeek === dayOfWeek
+      );
+
+      if (filteredCourses.length === 0) {
+        toast.error(`No courses found for ${classroomId} on ${dayOfWeek}`);
+        setResult(null);
+        return;
+      }
+
+      // Prepare courses data for algorithm
+      const coursesData = filteredCourses.map((course) => ({
+        id: course.id,
+        classCode: course.classCode,
+        section: course.id.split('-')[1] || '001',
+        startTime: course.startTime,
+        endTime: course.endTime,
+        instructor: course.instructor,
+      }));
+
+      // Call the activity selection algorithm
+      const optimized = await api.selectNonOverlappingClasses({
+        classroomId,
+        courses: coursesData,
+      });
+
+      setResult(optimized);
+      setCourses(classroomCourses);
+      toast.success(
+        `Optimization complete! ${optimized.totalSelected} out of ${optimized.totalConsidered} courses scheduled.`
+      );
     } catch (error: any) {
       toast.error(error.message || 'Failed to run optimizer');
+      setResult(null);
     } finally {
       setLoading(false);
     }
@@ -104,30 +139,43 @@ export function OptimizerView({ classrooms }: Props) {
           </div>
         ) : (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <Card className="bg-green-500/10 border-green-500/20">
                 <CardHeader className="py-4">
                   <CardTitle className="text-lg flex items-center justify-between">
-                    Scheduled
+                    Selected
                     <CheckCircle2 className="h-5 w-5 text-green-500" />
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-                    {result.totalSchedules}
+                    {result.totalSelected}
                   </div>
                 </CardContent>
               </Card>
               <Card className="bg-orange-500/10 border-orange-500/20">
                 <CardHeader className="py-4">
                   <CardTitle className="text-lg flex items-center justify-between">
-                    Conflicts Skipped
+                    Conflicts
                     <AlertCircle className="h-5 w-5 text-orange-500" />
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold text-orange-600 dark:text-orange-400">
-                    {result.conflicts?.length || 0}
+                    {result.conflictingClasses?.length || 0}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-blue-500/10 border-blue-500/20">
+                <CardHeader className="py-4">
+                  <CardTitle className="text-lg flex items-center justify-between">
+                    Utilization
+                    <Zap className="h-5 w-5 text-blue-500" />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                    {result.utilizationRate.toFixed(1)}%
                   </div>
                 </CardContent>
               </Card>
@@ -135,24 +183,27 @@ export function OptimizerView({ classrooms }: Props) {
 
             <Card>
               <CardHeader>
-                <CardTitle>Optimized Schedule Timeline</CardTitle>
-                <CardDescription>Successfully scheduled activities sorted by finish time.</CardDescription>
+                <CardTitle>Selected Non-Overlapping Classes</CardTitle>
+                <CardDescription>Activities sorted by finish time.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="relative border-l-2 border-primary/30 pl-6 space-y-6 py-2 ml-4">
-                  {result.schedules.length === 0 ? (
-                    <p className="text-muted-foreground italic">No activities could be scheduled.</p>
+                  {result.selectedClasses.length === 0 ? (
+                    <p className="text-muted-foreground italic">No classes could be scheduled.</p>
                   ) : (
-                    result.schedules.map((schedule, i) => (
-                      <div key={schedule.id} className="relative">
+                    result.selectedClasses.map((course) => (
+                      <div key={course.id} className="relative">
                         <span className="absolute -left-[35px] flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 ring-4 ring-background">
                           <span className="h-2 w-2 rounded-full bg-primary" />
                         </span>
                         <div className="flex flex-col gap-1 p-4 rounded-lg bg-card border shadow-sm transition-all hover:shadow-md hover:border-primary/50">
                           <div className="flex justify-between items-start">
-                            <span className="font-semibold text-primary">{schedule.courseId}</span>
+                            <div className="flex flex-col gap-1">
+                              <span className="font-semibold text-primary">{course.classCode} - {course.section}</span>
+                              <span className="text-sm text-muted-foreground">{course.instructor}</span>
+                            </div>
                             <Badge variant="outline" className="font-mono bg-background">
-                              {minutesToTime(schedule.startTime)} - {minutesToTime(schedule.endTime)}
+                              {minutesToTime(course.startTime)} - {minutesToTime(course.endTime)}
                             </Badge>
                           </div>
                         </div>
@@ -163,20 +214,33 @@ export function OptimizerView({ classrooms }: Props) {
               </CardContent>
             </Card>
 
-            {result.conflicts && result.conflicts.length > 0 && (
+            {result.conflictingClasses && result.conflictingClasses.length > 0 && (
               <Card className="border-orange-500/20 bg-orange-500/5">
                 <CardHeader>
-                  <CardTitle className="text-orange-600 dark:text-orange-400">Conflicting Courses</CardTitle>
-                  <CardDescription>These courses were skipped because they overlap with the selected schedule.</CardDescription>
+                  <CardTitle className="text-orange-600 dark:text-orange-400">Conflicting Classes</CardTitle>
+                  <CardDescription>These classes were skipped because they overlap with the selected schedule.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-                    {result.conflicts.map((c: any, i: number) => (
-                      <li key={i}>
-                        <span className="font-medium text-foreground">{c.classCode || c.id || 'Course'}</span> ({minutesToTime(c.startTime)} - {minutesToTime(c.endTime)})
-                      </li>
+                  <div className="space-y-3">
+                    {result.conflictingClasses.map((c, i) => (
+                      <div key={i} className="p-3 rounded-lg bg-background/50 border border-orange-500/20">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-medium text-foreground">{c.classCode} - {c.section}</span>
+                            <p className="text-sm text-muted-foreground mt-1">{c.instructor}</p>
+                            {c.conflictsWith && c.conflictsWith.length > 0 && (
+                              <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                                Conflicts with: {c.conflictsWith.join(', ')}
+                              </p>
+                            )}
+                          </div>
+                          <Badge variant="outline" className="font-mono bg-background">
+                            {minutesToTime(c.startTime)} - {minutesToTime(c.endTime)}
+                          </Badge>
+                        </div>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </CardContent>
               </Card>
             )}

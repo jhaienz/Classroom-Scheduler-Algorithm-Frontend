@@ -26,7 +26,17 @@ export function CourseDialog({ course, classrooms: initialClassrooms }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [classrooms, setClassrooms] = useState<Classroom[]>(initialClassrooms);
-  const [selectedClassroom, setSelectedClassroom] = useState<string>(course?.classroomId || initialClassrooms[0]?.id || '');
+  
+  // Extract classroom ID (could be string or Classroom object)
+  const getClassroomId = (classroomId: string | Classroom | undefined): string => {
+    if (!classroomId) return initialClassrooms[0]?.id || '';
+    if (typeof classroomId === 'string') return classroomId;
+    return classroomId.id;
+  };
+  
+  const [selectedClassroom, setSelectedClassroom] = useState<string>(
+    course ? getClassroomId(course.classroomId) : (initialClassrooms[0]?.id || '')
+  );
   const [selectedDay, setSelectedDay] = useState<string>(course?.dayOfWeek || 'Monday');
   const isEditing = !!course;
 

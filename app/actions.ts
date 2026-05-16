@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { api } from '@/lib/api';
-import { Classroom, Course, Schedule } from '@/lib/types';
+import { Classroom, Course, Schedule, ActivitySelectionRequest } from '@/lib/types';
 
-// Classrooms
+// ===== CLASSROOMS =====
 export async function createClassroomAction(data: Partial<Classroom>) {
   const result = await api.createClassroom(data);
   revalidatePath('/');
@@ -32,7 +32,7 @@ export async function deleteClassroomAction(id: string) {
   return result;
 }
 
-// Courses
+// ===== COURSES =====
 export async function createCourseAction(data: Partial<Course>) {
   const result = await api.createCourse(data);
   revalidatePath('/');
@@ -57,7 +57,7 @@ export async function deleteCourseAction(id: string) {
   return result;
 }
 
-// Schedules
+// ===== SCHEDULES =====
 export async function createScheduleAction(data: Partial<Schedule>) {
   const result = await api.createSchedule(data);
   revalidatePath('/');
@@ -76,5 +76,12 @@ export async function deleteScheduleAction(id: string) {
   const result = await api.deleteSchedule(id);
   revalidatePath('/');
   revalidatePath('/schedules');
+  return result;
+}
+
+// ===== ACTIVITY SELECTION / OPTIMIZATION =====
+export async function selectNonOverlappingClassesAction(data: ActivitySelectionRequest) {
+  const result = await api.selectNonOverlappingClasses(data);
+  revalidatePath('/optimizer');
   return result;
 }

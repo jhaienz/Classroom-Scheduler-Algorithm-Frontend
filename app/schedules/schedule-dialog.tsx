@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Schedule, Course, Classroom, DayOfWeek } from '@/lib/types';
+import { Schedule, Course, Classroom, DayOfWeek, ScheduleStatus } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -25,9 +25,21 @@ export function ScheduleDialog({ schedule, courses, classrooms }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [selectedCourse, setSelectedCourse] = useState<string>(schedule?.courseId || courses[0]?.id || '');
-  const [selectedClassroom, setSelectedClassroom] = useState<string>(schedule?.classroomId || classrooms[0]?.id || '');
+  
+  // Extract course ID (could be string or Course object)
+  const getCourseId = (courseId: string | Course | undefined): string => {
+    if (!courseId) return courses[0]?.id || '';
+    if (typeof courseId === 'string') return courseId;
+    return courseId.id;
+  };
+  
+  const [selectedCourse, setSelectedCourse] = useState<string>(
+    schedule ? getCourseId(schedule.courseId) : (courses[0]?.id || '')
+  );
   const [selectedDay, setSelectedDay] = useState<string>(schedule?.dayOfWeek || 'Monday');
+  const [scheduledDate, setScheduledDate] = useState<string>(
+    schedule ? new Date(schedule.scheduledDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+  );
   const isEditing = !!schedule;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -35,20 +47,17 @@ export function ScheduleDialog({ schedule, courses, classrooms }: Props) {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const startStr = formData.get('startTime') as string;
-    const endStr = formData.get('endTime') as string;
 
     const data = {
       id: formData.get('id') as string,
       courseId: selectedCourse,
-      classroomId: selectedClassroom,
+      status: (formData.get('status') as string || 'pending') as ScheduleStatus,
       dayOfWeek: selectedDay as DayOfWeek,
-      startTime: timeStringToMinutes(startStr),
-      endTime: timeStringToMinutes(endStr),
+      scheduledDate: new Date(scheduledDate).toISOString(),
     };
 
-    if (!selectedCourse || !selectedClassroom) {
-      toast.error('Please select both course and classroom');
+    if (!selectedCourse) {
+      toast.error('Please select a course');
       setLoading(false);
       return;
     }
@@ -59,8 +68,8 @@ export function ScheduleDialog({ schedule, courses, classrooms }: Props) {
       return;
     }
 
-    if (data.startTime >= data.endTime) {
-      toast.error('End time must be after start time');
+    if (!scheduledDate) {
+      toast.error('Please select a scheduled date');
       setLoading(false);
       return;
     }
@@ -141,24 +150,6 @@ export function ScheduleDialog({ schedule, courses, classrooms }: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="classroomId">Classroom</Label>
-            <Select value={selectedClassroom} onValueChange={(value) => {
-              if (value !== null) {
-                setSelectedClassroom(value);
-              }
-            }}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select classroom" />
-              </SelectTrigger>
-              <SelectContent>
-                {classrooms.map(c => (
-                  <SelectItem key={c.id} value={c.id || c._id!}>{c.name} ({c.building})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="dayOfWeek">Day of Week</Label>
             <Select value={selectedDay} onValueChange={(value) => {
               if (value !== null) {
@@ -174,15 +165,31 @@ export function ScheduleDialog({ schedule, courses, classrooms }: Props) {
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="startTime">Start Time</Label>
-              <Input id="startTime" name="startTime" type="time" defaultValue={schedule ? minutesToTime(schedule.startTime) : "09:00"} required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="endTime">End Time</Label>
-              <Input id="endTime" name="endTime" type="time" defaultValue={schedule ? minutesToTime(schedule.endTime) : "10:30"} required />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="scheduledDate">Scheduled Date</Label>
+            <Input 
+              id="scheduledDate" 
+              name="scheduledDate" 
+              type="date" 
+              value={scheduledDate}
+              onChange={(e) => setScheduledDate(e.target.value)}
+              required 
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="status">Status</Label>
+            <Select defaultValue={schedule?.status || 'pending'} name="status">
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="scheduled">Scheduled</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex justify-between pt-4">

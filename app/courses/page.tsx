@@ -17,8 +17,15 @@ export default async function CoursesPage() {
     // Handle error
   }
 
+  // Helper to extract classroom ID (could be string or Classroom object)
+  const getClassroomId = (classroomId: string | Classroom): string => {
+    if (typeof classroomId === 'string') return classroomId;
+    return classroomId.id;
+  };
+
   // Helper to find classroom name
-  const getClassroomName = (id: string) => {
+  const getClassroomName = (classroomId: string | Classroom) => {
+    const id = getClassroomId(classroomId);
     const cr = classrooms.find(c => c.id === id || c._id === id);
     return cr ? cr.name : id;
   };

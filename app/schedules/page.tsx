@@ -3,7 +3,6 @@ import { Schedule, Course, Classroom } from '@/lib/types';
 import { ScheduleDialog } from './schedule-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { minutesToTime } from '@/lib/utils';
 
 export default async function SchedulesPage() {
   let schedules: Schedule[] = [];
@@ -19,8 +18,15 @@ export default async function SchedulesPage() {
     // Handle error
   }
 
+  // Helper to extract ID from courseId (can be string or Course object)
+  const getCourseId = (courseId: string | Course): string => {
+    if (typeof courseId === 'string') return courseId;
+    return courseId.id;
+  };
+
   // Helper finders
-  const getCourseName = (id: string) => {
+  const getCourseName = (courseId: string | Course) => {
+    const id = getCourseId(courseId);
     const c = courses.find(c => c.id === id || c._id === id);
     return c ? `${c.classCode} - ${c.subjectName}` : id;
   };
@@ -46,9 +52,9 @@ export default async function SchedulesPage() {
             <TableRow>
               <TableHead>Schedule ID</TableHead>
               <TableHead>Course</TableHead>
-              <TableHead>Classroom</TableHead>
               <TableHead>Day</TableHead>
-              <TableHead>Time</TableHead>
+              <TableHead>Scheduled Date</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -64,12 +70,14 @@ export default async function SchedulesPage() {
                 <TableRow key={schedule.id}>
                   <TableCell className="font-medium text-xs text-muted-foreground">{schedule.id}</TableCell>
                   <TableCell>{getCourseName(schedule.courseId)}</TableCell>
-                  <TableCell>{getClassroomName(schedule.classroomId)}</TableCell>
                   <TableCell>
                     <Badge variant="outline">{schedule.dayOfWeek}</Badge>
                   </TableCell>
+                  <TableCell>{new Date(schedule.scheduledDate).toLocaleDateString()}</TableCell>
                   <TableCell>
-                    {minutesToTime(schedule.startTime)} - {minutesToTime(schedule.endTime)}
+                    <Badge variant={schedule.status === 'scheduled' ? 'default' : 'secondary'}>
+                      {schedule.status}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
